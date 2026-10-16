@@ -105,7 +105,7 @@ def LOG_SYMBOL(level):
     return ASCII_SYMBOLS.get(level, "[?]")
 
 
-def print_log(level, message, category=None, subcategory=None, overwrite=False, percentage=None):
+def print_log(level, message, category=None, subcategory=None, overwrite=False, percentage=None, keep=False):
     global _last_was_inline
 
     _enable_ansi()
@@ -136,7 +136,7 @@ def print_log(level, message, category=None, subcategory=None, overwrite=False, 
                 bar = f"📁 {'█' * filled}{'░' * empty} [{percent:.1f}%] - "
             else:
                 bar = f"{'#' * filled}{'.' * empty} [{percent:.1f}%] - "
-            overwrite = True
+            overwrite = not keep  # keep=True : la barre reste affichée, la ligne n'est pas écrasée
         except ValueError:
             bar = ""
 

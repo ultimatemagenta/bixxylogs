@@ -120,11 +120,11 @@ class BixxyLogger:
                 prefixes.append(os.path.join(base, _clean(self.subcategory)))
         return prefixes
 
-    def _write(self, level, message, percentage=None):
+    def _write(self, level, message, percentage=None, keep=False):
         priority = _priority(level)
 
         if priority >= _priority(_config["console_level"]):
-            print_log(level, message, self.category, self.subcategory, percentage=percentage)
+            print_log(level, message, self.category, self.subcategory, percentage=percentage, keep=keep)
 
         if not _config["files"] or priority < _priority(_config["file_level"]):
             return
@@ -132,7 +132,8 @@ class BixxyLogger:
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         cat_str = f"[{self.category}]" if self.category else ""
         subcat_str = f"[{self.subcategory}]" if self.subcategory else ""
-        log_line = f"[{timestamp}] [{level}] {cat_str} {subcat_str} {message}\n"
+        pct_str = f" [{float(percentage):.1f}%]" if percentage is not None else ""
+        log_line = f"[{timestamp}] [{level}] {cat_str} {subcat_str}{pct_str} {message}\n"
 
         with _lock:
             try:
@@ -143,11 +144,12 @@ class BixxyLogger:
             except OSError:
                 pass  # un journal inaccessible ne doit jamais faire planter le programme
 
-    def debug(self, msg, percentage=None): self._write("DEBUG", msg, percentage)
-    def info(self, msg, percentage=None): self._write("INFO", msg, percentage)
-    def success(self, msg, percentage=None): self._write("SUCCESS", msg, percentage)
-    def warning(self, msg, percentage=None): self._write("WARNING", msg, percentage)
-    def error(self, msg, percentage=None): self._write("ERROR", msg, percentage)
+    # percentage : affiche une barre ; keep=True la garde à l'écran (sans keep, la ligne est écrasée par la suivante)
+    def debug(self, msg, percentage=None, keep=False): self._write("DEBUG", msg, percentage, keep)
+    def info(self, msg, percentage=None, keep=False): self._write("INFO", msg, percentage, keep)
+    def success(self, msg, percentage=None, keep=False): self._write("SUCCESS", msg, percentage, keep)
+    def warning(self, msg, percentage=None, keep=False): self._write("WARNING", msg, percentage, keep)
+    def error(self, msg, percentage=None, keep=False): self._write("ERROR", msg, percentage, keep)
 
 
 def get_logger(name="Default", category=None, subcategory=None):

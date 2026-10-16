@@ -94,3 +94,13 @@ def test_no_color(monkeypatch, capsys):
     monkeypatch.setenv("NO_COLOR", "1")
     bixxylogs.get_logger("App").info("sobre")
     assert "\033[" not in capsys.readouterr().out
+
+
+def test_barre_gardee_avec_keep(tmp_path, capsys):
+    log = bixxylogs.get_logger("App", "Scan")
+    log.info("premier", percentage=10, keep=True)
+    log.info("second", percentage=20, keep=True)
+    out = capsys.readouterr().out
+    assert out.count("\n") == 2 and "\r" not in out.replace("\r\n", "\n").strip("\r")
+    texte = (tmp_path / "logs" / f"App_{datetime.date.today().isoformat()}.log").read_text(encoding="utf-8")
+    assert "[10.0%] premier" in texte and "[20.0%] second" in texte

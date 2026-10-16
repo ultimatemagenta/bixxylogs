@@ -39,8 +39,11 @@ logger.success("Process completed!")
 logger.warning("Low memory detected")
 logger.error("Failed to connect")
 
-# With progress bar
+# With progress bar (the line is overwritten by the next message)
 logger.info("Downloading...", percentage=45.5)
+
+# Progress bar that stays on screen, one line per item
+logger.success("file 12/40 done", percentage=30, keep=True)
 ```
 
 ## Log Levels
