@@ -67,7 +67,7 @@ Logs are automatically saved to `logs/` directory:
 - By category: `logs/Processing_2025-11-24.log`
 - By subcategory: `logs/Processing/Files_2025-11-24.log`
 
-Old log files (> 7 days) are automatically cleaned up.
+Old log files (> `keep_days`, 7 by default) are automatically cleaned up. DEBUG messages are shown on screen but not written to files unless `file_level="DEBUG"`.
 
 ## Advanced Usage
 
@@ -86,6 +86,24 @@ main_logger = get_logger(name="MainApp")
 db_logger = get_logger(name="MainApp", category="Database")
 api_logger = get_logger(name="MainApp", category="API", subcategory="REST")
 ```
+
+## Configuration (facultative)
+
+```python
+from bixxylogs import configure, close_all
+
+configure(
+    log_dir="D:/mes_logs",     # défaut : <dossier courant>/logs (rien n'est créé avant le premier message écrit)
+    console_level="INFO",      # niveau minimal affiché à l'écran
+    file_level="DEBUG",        # niveau minimal écrit dans les fichiers (défaut : INFO)
+    keep_days=14,              # défaut : 7
+    files=True,                # False : écran seulement
+)
+```
+
+- Plusieurs loggers partagent les mêmes fichiers ouverts ; ils sont fermés automatiquement à la sortie (`close_all()` pour le faire à la main).
+- Console qui ne sait pas afficher les emojis (cp1252 sous Windows) : repli automatique sur `[i] [+] [!] [x]`, sans erreur.
+- `NO_COLOR=1` désactive les couleurs.
 
 ## License
 

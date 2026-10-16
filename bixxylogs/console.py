@@ -1,9 +1,13 @@
+import os
 import sys
+import threading
 from datetime import datetime
-import sys
 
 if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(line_buffering=True)
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+    except Exception:
+        pass
 
 # ANSI colors
 COLORS = {
@@ -23,7 +27,70 @@ FIELD_WIDTHS = {
     "SUBCATEGORY": 12
 }
 
+SYMBOLS = {
+    "DEBUG": "🐞",
+    "INFO": "ℹ️",
+    "SUCCESS": "✅",
+    "WARNING": "⚠️",
+    "ERROR": "❌",
+}
+# Repli quand la console ne sait pas encoder les emojis (ex. cp1252 sous Windows)
+ASCII_SYMBOLS = {
+    "DEBUG": "[D]",
+    "INFO": "[i]",
+    "SUCCESS": "[+]",
+    "WARNING": "[!]",
+    "ERROR": "[x]",
+}
+
 _last_was_inline = False
+_lock = threading.RLock()
+_ansi_ready = False
+
+
+def _enable_ansi():
+    """Active les séquences ANSI dans la console Windows (une seule fois)."""
+    global _ansi_ready
+    if _ansi_ready:
+        return
+    _ansi_ready = True
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.GetStdHandle(-11)
+        mode = ctypes.c_uint32()
+        if kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            kernel32.SetConsoleMode(handle, mode.value | 0x0004)  # ENABLE_VIRTUAL_TERMINAL_PROCESSING
+    except Exception:
+        pass
+
+
+def _use_color():
+    return "NO_COLOR" not in os.environ
+
+
+def _encoding():
+    return getattr(sys.stdout, "encoding", None) or "utf-8"
+
+
+def _can_encode(text):
+    try:
+        text.encode(_encoding())
+        return True
+    except (UnicodeEncodeError, LookupError):
+        return False
+
+
+def _safe(text):
+    """Remplace ce que la console ne sait pas afficher au lieu de lever UnicodeEncodeError."""
+    enc = _encoding()
+    try:
+        return text.encode(enc, "replace").decode(enc, "replace")
+    except LookupError:
+        return text
+
 
 def format_field(value, length):
     value = str(value) if value else "-"
@@ -31,22 +98,32 @@ def format_field(value, length):
         return value[:length]
     return value.ljust(length)
 
+
+def LOG_SYMBOL(level):
+    if _can_encode("".join(SYMBOLS.values()) + "█░📁"):
+        return SYMBOLS.get(level, "❔")
+    return ASCII_SYMBOLS.get(level, "[?]")
+
+
 def print_log(level, message, category=None, subcategory=None, overwrite=False, percentage=None):
     global _last_was_inline
 
+    _enable_ansi()
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    color = COLORS.get(level, COLORS["RESET"])
-    reset = COLORS["RESET"]
+    colors = COLORS if _use_color() else {k: "" for k in COLORS}
+    color = colors.get(level, colors["RESET"])
+    reset = colors["RESET"]
 
     symbol = LOG_SYMBOL(level)
+    unicode_ok = symbol in SYMBOLS.values()
     cat_str = format_field(category, FIELD_WIDTHS["CATEGORY"])
     subcat_str = format_field(subcategory, FIELD_WIDTHS["SUBCATEGORY"])
 
     # Couleur du message selon le niveau
     if level in ["ERROR", "WARNING"]:
-        msg_color = COLORS[level]
+        msg_color = colors[level]
     else:
-        msg_color = COLORS["MESSAGE"]
+        msg_color = colors["MESSAGE"]
     # Barre de progression si pourcentage donné
     bar = ""
     if percentage is not None:
@@ -55,39 +132,31 @@ def print_log(level, message, category=None, subcategory=None, overwrite=False, 
             percent = max(0, min(100, percent))  # Clamp
             filled = int(percent // 10)
             empty = 10 - filled
-            bar = f"📁 {'█' * filled}{'░' * empty} [{percent:.1f}%] - "
+            if unicode_ok:
+                bar = f"📁 {'█' * filled}{'░' * empty} [{percent:.1f}%] - "
+            else:
+                bar = f"{'#' * filled}{'.' * empty} [{percent:.1f}%] - "
             overwrite = True
         except ValueError:
             bar = ""
 
-    formatted = (
+    formatted = _safe(
         f"{color}{now}{reset} | "
         f"{color}{symbol}{reset} | "
-        f"{COLORS['CATEGORY']}{cat_str}{reset} | "
-        f"{COLORS['SUBCATEGORY']}{subcat_str}{reset} | : "
+        f"{colors['CATEGORY']}{cat_str}{reset} | "
+        f"{colors['SUBCATEGORY']}{subcat_str}{reset} | : "
         f"{msg_color}{bar}{message}{reset}"
     )
 
     end_char = "\r" if overwrite else "\n"
-    if overwrite:
-        # Efface proprement la ligne précédente avant de réécrire
-        sys.stdout.write("\r" + " " * 200 + "\r")
-        _last_was_inline = True
-    else:
-        if _last_was_inline:
+    with _lock:
+        if overwrite:
+            # Efface proprement la ligne précédente avant de réécrire
+            sys.stdout.write("\r" + " " * 200 + "\r")
+            _last_was_inline = True
+        elif _last_was_inline:
             sys.stdout.write("\r" + " " * 200 + "\r")
             _last_was_inline = False
 
-
-    sys.stdout.write(formatted + end_char)
-    sys.stdout.flush()
-
-
-def LOG_SYMBOL(level):
-    return {
-        "DEBUG": "🐞",
-        "INFO": "ℹ️",
-        "SUCCESS": "✅",
-        "WARNING": "⚠️",
-        "ERROR": "❌",
-    }.get(level, "❔")
+        sys.stdout.write(formatted + end_char)
+        sys.stdout.flush()
